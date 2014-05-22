@@ -1,26 +1,26 @@
-For a full demonstration please view the screencast. http://screenr.com/VwuH
-
-This package automatically uploads media file to Azure Blob Storage and can be easily switched between local and CDN.
+This package automatically uploads media file to amazon S3. It also allows media files tobe loaded easily from S3 or CDN.
 
 The package will install 3 dlls and one example file under /Views/MacroPartials/ folder which shows how this package can be used.
 
-Azure Blob Storage settings must be done on /config/FileSystemProviders.config file. here is the list of settings for Azure Blob Storage:
+Amazon S3 settings must be done on /config/FileSystemProviders.config file. here is the list of settings for amazon:
 
-1. azureConnectionString : Azure Connection String
+1. awsAccessKey : Amazon Access Key
 
-2. saveMediaToAzure : specify true if you wish to save media files to amazon. 
+2. awsSecretKey : Amazon Secret Key
 
-Make sure you create a container called "Media", the same name as "virtualRoot" in FileSystemProvider.Config file.
+3. awsBucketName : S3 Bucket Name
 
-*** azure Connection string has to be in the following format:
+4. awsSaveMediaToS3 : specify true if you wish to save media files to amazon, the default value is false. 
 
-DefaultEndpointsProtocol=https;AccountName=*****;AccountKey=****
 
-It also adds two app config keys to web.config as follow:
+The package also adds two app config keys to web.config as follow:
 
-1. "cdnDomain" this is the cdn domain of your website.
+1. "cdnDomain" this is the cdn domain of your website. (must start with http ,  https or // and end with no forward slash)
 
-2. "useCDN" true/false. specify true in order to use cdnDomain before media url. (refer to the example file)
+2. "useCDN" true/false. specify true in order to use cdnDomain before media url. (refer to the example file). The default value is false.
 
-For a full demonstration please view the screencast. http://screenr.com/VwuHAST-Amazon-S3
+* For existing project, just copy your media folder to Amazon S3 and install and use this package, as easy as that! 
 
+For a full demonstration please view the screencast. http://screenr.com/P8NH
+
+Your feedback is much appreciated. 
