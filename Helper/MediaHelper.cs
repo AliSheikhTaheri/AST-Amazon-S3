@@ -11,7 +11,7 @@
             var media = umbracoHelper.TypedMedia(mediaId);
             if (media != null)
             {
-                var output = new S3PublishedContent(umbracoHelper.TypedMedia(mediaId));
+                var output = new S3PublishedContent(media);
                 output.Url = string.Format("{0}{1}", GlobalHelper.GetCdnDomain(), output.Url());
                 return output;
             }
