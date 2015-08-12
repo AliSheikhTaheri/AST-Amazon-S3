@@ -20,10 +20,10 @@ __MACOSX/
 /Bin
 .bin/
 .Bin/
+App_Browsers/
 [Cc]ached/
 ClientDependency/
 ExamineIndexes/
-*/App_Data/Logs/*
-*/App_Data/umbraco.licensing.log.txt
-*/App_Data/umbraco.config
 
+# NuGet
+packages
