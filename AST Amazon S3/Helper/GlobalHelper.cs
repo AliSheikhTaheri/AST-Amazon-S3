@@ -12,6 +12,7 @@
         public static string GetCdnDomain()
         {
             var output = string.Empty;
+
             if (!string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["useCDN"]) && string.Equals(ConfigurationManager.AppSettings["useCDN"], "true", StringComparison.CurrentCulture))
             {
                 if (!string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["cdnDomain"]))

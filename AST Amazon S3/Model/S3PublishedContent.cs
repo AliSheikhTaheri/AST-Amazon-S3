@@ -5,8 +5,7 @@
 
     public class S3PublishedContent : DynamicPublishedContent
     {
-        public S3PublishedContent(IPublishedContent content)
-            : base(content)
+        public S3PublishedContent(IPublishedContent content) : base(content)
         {
             this.Url = Url;
         }

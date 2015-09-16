@@ -1,4 +1,8 @@
-﻿namespace AST.S3.FileSystem
+﻿using System.Reflection;
+using System.Runtime.Remoting;
+using Amazon;
+
+namespace AST.S3.FileSystem
 {
     using System;
     using System.Collections.Generic;
@@ -14,15 +18,27 @@
     {
         private readonly string _rootUrl;
 
-        private AmazonS3FileSystem amazonS3FileSystem;
+        internal string RootPath { get; private set; }
+
+        private string AwsAccessKey { get; set; }
+
+        private string AwsSecretKey { get; set; }
+
+        private string AwsBucketName { get; set; }
+
+        private bool AwsSaveMediaToS3 { get; set; }
+
+        private RegionEndpoint AwsRegion { get; set; }
+
+        private readonly AmazonS3FileSystem _amazonS3FileSystem;
 
         #region constructors
 
-        public S3FileSystem(string virtualRoot, string awsAccessKey, string awsSecretKey, string awsBucketName, string awsSaveMediaToS3)
+        public S3FileSystem(string virtualRoot, string awsAccessKey, string awsSecretKey, string awsBucketName, string awsSaveMediaToS3, string awsRegion)
         {
             if (virtualRoot == null)
             {
-                throw new ArgumentNullException("virtualRoot");
+                throw new ArgumentNullException(nameof(virtualRoot));
             }
 
             if (!virtualRoot.StartsWith("~/"))
@@ -32,15 +48,31 @@
 
             RootPath = IOHelper.MapPath(virtualRoot);
             _rootUrl = IOHelper.ResolveUrl(virtualRoot);
-
+            
             AwsAccessKey = awsAccessKey;
             AwsSecretKey = awsSecretKey;
             AwsBucketName = awsBucketName;
             AwsSaveMediaToS3 = bool.Parse(awsSaveMediaToS3);
 
+            // [ML] - This isnt ideal, but is the best way i an think of making this paramaterized in the IFileSystemProviderManager
+
+            FieldInfo field = null;
+
+            if (!string.IsNullOrWhiteSpace(awsRegion))
+            {
+                field = typeof(RegionEndpoint).GetField(awsRegion, BindingFlags.Static | BindingFlags.Public);
+
+                if (field == null)
+                {
+                    throw new ArgumentException($"No Field found on '{typeof(RegionEndpoint).Name}' with the name '{awsRegion}'");
+                }
+            }
+
+            AwsRegion = field?.GetValue(null) as RegionEndpoint ?? RegionEndpoint.USWest1;
+
             if (AwsIsValid)
             {
-                amazonS3FileSystem = new AmazonS3FileSystem(AwsAccessKey, AwsSecretKey, AwsBucketName);
+                _amazonS3FileSystem = new AmazonS3FileSystem(AwsAccessKey, AwsSecretKey, AwsBucketName, AwsRegion);
             }
         }
 
@@ -67,37 +99,17 @@
 
         #endregion
 
-        internal string RootPath { get; private set; }
-
-        private string AwsAccessKey { get; set; }
-
-        private string AwsSecretKey { get; set; }
-
-        private string AwsBucketName { get; set; }
-
-        private bool AwsSaveMediaToS3 { get; set; }
-
-        private bool AwsIsValid
-        {
-            get
-            {
-                return !string.IsNullOrWhiteSpace(AwsAccessKey) && !string.IsNullOrWhiteSpace(AwsBucketName)
-                       && !string.IsNullOrWhiteSpace(AwsBucketName);
-            }
-        }
+        private bool AwsIsValid => !string.IsNullOrWhiteSpace(AwsAccessKey) && !string.IsNullOrWhiteSpace(AwsBucketName) && !string.IsNullOrWhiteSpace(AwsBucketName)  && AwsRegion != null;
 
         #region Methods
 
-        public void AddFile(string path, Stream stream)
-        {
-            AddFile(path, stream, true);
-        }
+        public void AddFile(string path, Stream stream) => AddFile(path, stream, true);
 
         public void AddFile(string path, Stream stream, bool overrideIfExists)
         {
             if (FileExists(path) && !overrideIfExists)
             {
-                throw new InvalidOperationException(string.Format("A file at path '{0}' already exists", path));
+                throw new InvalidOperationException($"A file at path '{path}' already exists");
             }
 
             EnsureDirectory(Path.GetDirectoryName(path));
@@ -114,7 +126,7 @@
 
             if (AwsIsValid && AwsSaveMediaToS3)
             {
-                amazonS3FileSystem.SaveFile(GetFullPath(path), GetFolderStructureForAmazon(path), GetFileNameFromPath(path));
+                _amazonS3FileSystem.SaveFile(GetFullPath(path), GetFolderStructureForAmazon(path), GetFileNameFromPath(path));
             }
         }
 
@@ -141,19 +153,16 @@
 
                 if (AwsIsValid && AwsSaveMediaToS3)
                 {
-                    amazonS3FileSystem.DeleteFile(GetFolderStructureForAmazon(path), GetFileNameFromPath(path));
+                    _amazonS3FileSystem.DeleteFile(GetFolderStructureForAmazon(path), GetFileNameFromPath(path));
                 }
             }
             catch (FileNotFoundException ex)
             {
-                LogHelper.Info<S3FileSystem>(string.Format("DeleteFile failed with FileNotFoundException: {0}", ex.InnerException));
+                LogHelper.Info<S3FileSystem>($"DeleteFile failed with FileNotFoundException: {ex.InnerException}");
             }
         }
 
-        public void DeleteDirectory(string path)
-        {
-            DeleteDirectory(path, false);
-        }
+        public void DeleteDirectory(string path) => DeleteDirectory(path, false);
 
         public void DeleteDirectory(string path, bool recursive)
         {
@@ -168,7 +177,7 @@
 
                 if (AwsIsValid && AwsSaveMediaToS3)
                 {
-                    amazonS3FileSystem.DeleteFolder(GetFolderStructureForAmazon(path));
+                    _amazonS3FileSystem.DeleteFolder(GetFolderStructureForAmazon(path));
                 }
             }
             catch (DirectoryNotFoundException ex)
@@ -200,15 +209,9 @@
             return Enumerable.Empty<string>();
         }
 
-        public bool DirectoryExists(string path)
-        {
-            return Directory.Exists(GetFullPath(path));
-        }
+        public bool DirectoryExists(string path) =>  Directory.Exists(GetFullPath(path));
 
-        public IEnumerable<string> GetFiles(string path)
-        {
-            return GetFiles(path, "*.*");
-        }
+        public IEnumerable<string> GetFiles(string path) => GetFiles(path, "*.*");
 
         public IEnumerable<string> GetFiles(string path, string filter)
         {
@@ -233,67 +236,26 @@
             return Enumerable.Empty<string>();
         }
 
-        public Stream OpenFile(string path)
-        {
-            var fullPath = GetFullPath(path);
-            return File.OpenRead(fullPath);
-        }
+        public Stream OpenFile(string path) => File.OpenRead(GetFullPath(path));
 
-        public bool FileExists(string path)
-        {
-            return File.Exists(GetFullPath(path));
-        }
+        public bool FileExists(string path) => File.Exists(GetFullPath(path));
 
-        public string GetRelativePath(string fullPathOrUrl)
-        {
-            var relativePath = fullPathOrUrl
-                .TrimStart(_rootUrl)
-                .Replace('/', Path.DirectorySeparatorChar)
-                .TrimStart(RootPath)
-                .TrimStart(Path.DirectorySeparatorChar);
+        public string GetRelativePath(string fullPathOrUrl) => fullPathOrUrl.TrimStart(_rootUrl).Replace('/', Path.DirectorySeparatorChar).TrimStart(RootPath).TrimStart(Path.DirectorySeparatorChar);
 
-            return relativePath;
-        }
+        public string GetFullPath(string path) => !path.StartsWith(RootPath) ? Path.Combine(RootPath, path) : path;
+        
+        public string GetUrl(string path) => _rootUrl.TrimEnd("/") + "/" + path.TrimStart(Path.DirectorySeparatorChar).Replace(Path.DirectorySeparatorChar, '/').TrimEnd("/");
 
-        public string GetFullPath(string path)
-        {
-            return !path.StartsWith(RootPath)
-                ? Path.Combine(RootPath, path)
-                : path;
-        }
+        public DateTimeOffset GetLastModified(string path) => DirectoryExists(path) ? new DirectoryInfo(GetFullPath(path)).LastWriteTimeUtc : new FileInfo(GetFullPath(path)).LastWriteTimeUtc;
 
-        public string GetUrl(string path)
-        {
-            return _rootUrl.TrimEnd("/") + "/" + path
-                .TrimStart(Path.DirectorySeparatorChar)
-                .Replace(Path.DirectorySeparatorChar, '/')
-                .TrimEnd("/");
-        }
-
-        public DateTimeOffset GetLastModified(string path)
-        {
-            return DirectoryExists(path)
-                ? new DirectoryInfo(GetFullPath(path)).LastWriteTimeUtc
-                : new FileInfo(GetFullPath(path)).LastWriteTimeUtc;
-        }
-
-        public DateTimeOffset GetCreated(string path)
-        {
-            return DirectoryExists(path)
-                ? Directory.GetCreationTimeUtc(GetFullPath(path))
-                : File.GetCreationTimeUtc(GetFullPath(path));
-        }
+        public DateTimeOffset GetCreated(string path) => DirectoryExists(path) ? Directory.GetCreationTimeUtc(GetFullPath(path)) : File.GetCreationTimeUtc(GetFullPath(path));
 
         #endregion
 
         #region Helper Methods
 
-        protected virtual void EnsureDirectory(string path)
-        {
-            path = GetFullPath(path);
-            Directory.CreateDirectory(path);
-        }
-
+        protected virtual void EnsureDirectory(string path) => Directory.CreateDirectory(GetFullPath(path));
+        
         protected string EnsureTrailingSeparator(string path)
         {
             if (!path.EndsWith(Path.DirectorySeparatorChar.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
@@ -304,10 +266,7 @@
             return path;
         }
 
-        protected string GetFileNameFromPath(string path)
-        {
-            return Path.GetFileName(path);
-        }
+        protected string GetFileNameFromPath(string path) => Path.GetFileName(path);
 
         protected string GetFolderStructureForAmazon(string path)
         {
