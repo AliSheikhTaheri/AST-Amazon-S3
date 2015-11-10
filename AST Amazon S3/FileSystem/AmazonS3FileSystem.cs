@@ -1,4 +1,7 @@
-﻿namespace AST.S3.FileSystem
+﻿using System;
+using Umbraco.Core.Logging;
+
+namespace AST.S3.FileSystem
 {
     using System.IO;
 
@@ -75,8 +78,15 @@
                 .WithTimeout(-1);
 
             // Put file
-            var response = _client.PutObject(request);
-            response.Dispose();
+            try
+            {
+                var response = _client.PutObject(request);
+                response.Dispose();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Error<AmazonS3FileSystem>(ex.Message, ex);
+            }
         }
 
         /// <summary>
